@@ -1,13 +1,26 @@
-from functools import lru_cache
+class MemoriaFibonacci:
+    """Administra los términos calculados en una tabla de dispersión."""
+
+    def __init__(self):
+        self._terminos = {0: 0, 1: 1}
+
+    def calcular(self, n):
+        """Calcula un término y guarda cada resultado intermedio en la tabla."""
+        if n < 0:
+            raise ValueError("El índice debe ser mayor o igual a cero.")
+
+        if n not in self._terminos:
+            self._terminos[n] = self.calcular(n - 1) + self.calcular(n - 2)
+
+        return self._terminos[n]
 
 
-@lru_cache(maxsize=None)
+_memoria = MemoriaFibonacci()
+
+
 def termino_fibonacci(n):
-    """Calcula el término n de Fibonacci usando memoización."""
-    if n < 2:
-        return n
-
-    return termino_fibonacci(n - 1) + termino_fibonacci(n - 2)
+    """Calcula el término n usando una tabla de memoización compartida."""
+    return _memoria.calcular(n)
 
 
 def fibonacci(cantidad):
