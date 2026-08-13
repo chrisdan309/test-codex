@@ -1,12 +1,26 @@
 import json
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
+from usuarios_crud import CrudUsuarios
+
 
 usuarios = []
 proximo_id = 1
 
 
 class ServidorUsuarios(BaseHTTPRequestHandler):
+    def obtener_crud(self):
+        return CrudUsuarios(
+            usuarios,
+            lambda: proximo_id,
+            self.guardar_proximo_id,
+        )
+
+    @staticmethod
+    def guardar_proximo_id(nuevo_id):
+        global proximo_id
+        proximo_id = nuevo_id
+
     def responder(self, estado, datos=None):
         cuerpo = json.dumps(datos or {}, ensure_ascii=False).encode("utf-8")
         self.send_response(estado)
@@ -32,19 +46,14 @@ class ServidorUsuarios(BaseHTTPRequestHandler):
         return None
 
     def buscar_usuario(self, usuario_id):
-        return next((u for u in usuarios if u["id"] == usuario_id), None)
+        return self.obtener_crud().buscar(usuario_id)
 
     def email_duplicado(self, email, usuario_id=None):
-        email_normalizado = email.strip().lower()
-        return any(
-            u["email"].strip().lower() == email_normalizado
-            and u["id"] != usuario_id
-            for u in usuarios
-        )
+        return self.obtener_crud().email_duplicado(email, usuario_id)
 
     def do_GET(self):
         if self.path == "/usuarios":
-            self.responder(200, usuarios)
+            self.responder(200, self.obtener_crud().listar())
             return
 
         usuario = self.buscar_usuario(self.obtener_id())
@@ -54,57 +63,21 @@ class ServidorUsuarios(BaseHTTPRequestHandler):
             self.responder(404, {"error": "Usuario no encontrado"})
 
     def do_POST(self):
-        global proximo_id
-
         if self.path != "/usuarios":
             self.responder(404, {"error": "Ruta no encontrada"})
             return
 
-        datos = self.leer_json()
-        if not datos or not datos.get("nombre") or not datos.get("email"):
-            self.responder(400, {"error": "Nombre y email son obligatorios"})
-            return
-
-        email = datos["email"].strip()
-        if self.email_duplicado(email):
-            self.responder(409, {"error": "El email ya está registrado"})
-            return
-
-        usuario = {
-            "id": proximo_id,
-            "nombre": datos["nombre"],
-            "email": email,
-        }
-        usuarios.append(usuario)
-        proximo_id += 1
-        self.responder(201, usuario)
+        estado, respuesta = self.obtener_crud().crear(self.leer_json())
+        self.responder(estado, respuesta)
 
     def do_PUT(self):
-        usuario = self.buscar_usuario(self.obtener_id())
         datos = self.leer_json()
-
-        if not usuario:
-            self.responder(404, {"error": "Usuario no encontrado"})
-        elif not datos:
-            self.responder(400, {"error": "JSON inválido"})
-        else:
-            email = datos.get("email", usuario["email"]).strip()
-            if self.email_duplicado(email, usuario["id"]):
-                self.responder(409, {"error": "El email ya está registrado"})
-                return
-
-            usuario["nombre"] = datos.get("nombre", usuario["nombre"])
-            usuario["email"] = email
-            self.responder(200, usuario)
+        estado, respuesta = self.obtener_crud().actualizar(self.obtener_id(), datos)
+        self.responder(estado, respuesta)
 
     def do_DELETE(self):
-        usuario = self.buscar_usuario(self.obtener_id())
-        if not usuario:
-            self.responder(404, {"error": "Usuario no encontrado"})
-            return
-
-        usuarios.remove(usuario)
-        self.responder(200, {"mensaje": "Usuario eliminado"})
+        estado, respuesta = self.obtener_crud().eliminar(self.obtener_id())
+        self.responder(estado, respuesta)
 
 
 if __name__ == "__main__":
