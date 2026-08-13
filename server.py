@@ -23,7 +23,7 @@ class ServidorUsuarios(BaseHTTPRequestHandler):
             return None
 
     def obtener_id(self):
-        partes = self.path.strip("/").split("/")
+        partes = self.path.split("?", 1)[0].strip("/").split("/")
         if len(partes) == 2 and partes[0] == "usuarios":
             try:
                 return int(partes[1])
@@ -47,7 +47,12 @@ class ServidorUsuarios(BaseHTTPRequestHandler):
             self.responder(200, usuarios)
             return
 
-        usuario = self.buscar_usuario(self.obtener_id())
+        usuario_id = self.obtener_id()
+        if usuario_id is None:
+            self.responder(404, {"error": "Ruta no encontrada"})
+            return
+
+        usuario = self.buscar_usuario(usuario_id)
         if usuario:
             self.responder(200, usuario)
         else:
@@ -61,18 +66,30 @@ class ServidorUsuarios(BaseHTTPRequestHandler):
             return
 
         datos = self.leer_json()
-        if not datos or not datos.get("nombre") or not datos.get("email"):
+        if not isinstance(datos, dict):
+            self.responder(400, {"error": "JSON inválido"})
+            return
+
+        nombre = datos.get("nombre")
+        email = datos.get("email")
+        if (
+            not isinstance(nombre, str)
+            or not nombre.strip()
+            or not isinstance(email, str)
+            or not email.strip()
+        ):
             self.responder(400, {"error": "Nombre y email son obligatorios"})
             return
 
-        email = datos["email"].strip()
+        nombre = nombre.strip()
+        email = email.strip()
         if self.email_duplicado(email):
             self.responder(409, {"error": "El email ya está registrado"})
             return
 
         usuario = {
             "id": proximo_id,
-            "nombre": datos["nombre"],
+            "nombre": nombre,
             "email": email,
         }
         usuarios.append(usuario)
@@ -80,25 +97,50 @@ class ServidorUsuarios(BaseHTTPRequestHandler):
         self.responder(201, usuario)
 
     def do_PUT(self):
-        usuario = self.buscar_usuario(self.obtener_id())
-        datos = self.leer_json()
+        usuario_id = self.obtener_id()
+        if usuario_id is None:
+            self.responder(404, {"error": "Ruta no encontrada"})
+            return
+
+        usuario = self.buscar_usuario(usuario_id)
 
         if not usuario:
             self.responder(404, {"error": "Usuario no encontrado"})
-        elif not datos:
-            self.responder(400, {"error": "JSON inválido"})
-        else:
-            email = datos.get("email", usuario["email"]).strip()
-            if self.email_duplicado(email, usuario["id"]):
-                self.responder(409, {"error": "El email ya está registrado"})
-                return
+            return
 
-            usuario["nombre"] = datos.get("nombre", usuario["nombre"])
-            usuario["email"] = email
-            self.responder(200, usuario)
+        datos = self.leer_json()
+        if not isinstance(datos, dict) or not datos:
+            self.responder(400, {"error": "JSON inválido"})
+            return
+
+        nombre = datos.get("nombre", usuario["nombre"])
+        email = datos.get("email", usuario["email"])
+        if (
+            not isinstance(nombre, str)
+            or not nombre.strip()
+            or not isinstance(email, str)
+            or not email.strip()
+        ):
+            self.responder(400, {"error": "Nombre y email no pueden estar vacíos"})
+            return
+
+        nombre = nombre.strip()
+        email = email.strip()
+        if self.email_duplicado(email, usuario["id"]):
+            self.responder(409, {"error": "El email ya está registrado"})
+            return
+
+        usuario["nombre"] = nombre
+        usuario["email"] = email
+        self.responder(200, usuario)
 
     def do_DELETE(self):
-        usuario = self.buscar_usuario(self.obtener_id())
+        usuario_id = self.obtener_id()
+        if usuario_id is None:
+            self.responder(404, {"error": "Ruta no encontrada"})
+            return
+
+        usuario = self.buscar_usuario(usuario_id)
         if not usuario:
             self.responder(404, {"error": "Usuario no encontrado"})
             return
