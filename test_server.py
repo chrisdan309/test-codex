@@ -75,6 +75,45 @@ class PruebasServidorUsuarios(unittest.TestCase):
         self.assertEqual(estado, 400)
         self.assertEqual(respuesta, {"error": "Nombre y email son obligatorios"})
 
+    def test_rechaza_email_invalido_al_crear(self):
+        estado, respuesta = self.crear_usuario(email="no-es-un-correo")
+
+        self.assertEqual(estado, 400)
+        self.assertEqual(respuesta, {"error": "Formato de email inválido"})
+
+    def test_rechaza_email_invalido_al_actualizar(self):
+        self.crear_usuario()
+        estado, respuesta = self.solicitar(
+            "PUT", "/usuarios/1", {"email": "correo-invalido"}
+        )
+
+        self.assertEqual(estado, 400)
+        self.assertEqual(respuesta, {"error": "Formato de email inválido"})
+
+        _, usuario = self.solicitar("GET", "/usuarios/1")
+        self.assertEqual(usuario["email"], "ana@example.com")
+
+    def test_filtra_usuarios_por_nombre(self):
+        self.crear_usuario(nombre="Ana María", email="ana@example.com")
+        self.crear_usuario(nombre="Mariana", email="mariana@example.com")
+        self.crear_usuario(nombre="Luis", email="luis@example.com")
+
+        estado, usuarios = self.solicitar("GET", "/usuarios?q=ANA")
+
+        self.assertEqual(estado, 200)
+        self.assertEqual(
+            [usuario["nombre"] for usuario in usuarios],
+            ["Ana María", "Mariana"],
+        )
+
+    def test_filtro_por_nombre_sin_resultados(self):
+        self.crear_usuario()
+
+        estado, usuarios = self.solicitar("GET", "/usuarios?q=Pedro")
+
+        self.assertEqual(estado, 200)
+        self.assertEqual(usuarios, [])
+
     def test_rechaza_email_duplicado_al_crear(self):
         self.crear_usuario(email=" Ana@Example.com ")
         estado, respuesta = self.crear_usuario(
