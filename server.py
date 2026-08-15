@@ -1,5 +1,6 @@
 import json
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from urllib.parse import parse_qs, urlparse
 
 from usuarios_crud import CrudUsuarios
 
@@ -22,7 +23,10 @@ class ServidorUsuarios(BaseHTTPRequestHandler):
         proximo_id = nuevo_id
 
     def responder(self, estado, datos=None):
-        cuerpo = json.dumps(datos or {}, ensure_ascii=False).encode("utf-8")
+        cuerpo = json.dumps(
+            {} if datos is None else datos,
+            ensure_ascii=False,
+        ).encode("utf-8")
         self.send_response(estado)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(cuerpo)))
@@ -52,8 +56,10 @@ class ServidorUsuarios(BaseHTTPRequestHandler):
         return self.obtener_crud().email_duplicado(email, usuario_id)
 
     def do_GET(self):
-        if self.path == "/usuarios":
-            self.responder(200, self.obtener_crud().listar())
+        url = urlparse(self.path)
+        if url.path == "/usuarios":
+            q = parse_qs(url.query).get("q", [None])[0]
+            self.responder(200, self.obtener_crud().listar(q))
             return
 
         usuario = self.buscar_usuario(self.obtener_id())

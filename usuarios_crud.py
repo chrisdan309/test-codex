@@ -1,5 +1,10 @@
 """Reglas de negocio y persistencia en memoria para el CRUD de usuarios."""
 
+import re
+
+
+PATRON_EMAIL = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$")
+
 
 class CrudUsuarios:
     """Gestiona usuarios sin depender de detalles del servidor HTTP."""
@@ -9,8 +14,16 @@ class CrudUsuarios:
         self._obtener_proximo_id = obtener_proximo_id
         self._guardar_proximo_id = guardar_proximo_id
 
-    def listar(self):
-        return self.usuarios
+    def listar(self, q=None):
+        if q is None:
+            return self.usuarios
+
+        consulta = q.lower()
+        return [
+            usuario
+            for usuario in self.usuarios
+            if consulta in usuario["nombre"].lower()
+        ]
 
     def buscar(self, usuario_id):
         return next(
@@ -26,11 +39,21 @@ class CrudUsuarios:
             for usuario in self.usuarios
         )
 
+    @staticmethod
+    def email_valido(email):
+        return isinstance(email, str) and PATRON_EMAIL.fullmatch(email) is not None
+
     def crear(self, datos):
         if not datos or not datos.get("nombre") or not datos.get("email"):
             return 400, {"error": "Nombre y email son obligatorios"}
 
-        email = datos["email"].strip()
+        email = datos["email"]
+        if not isinstance(email, str):
+            return 400, {"error": "Formato de email inválido"}
+
+        email = email.strip()
+        if not self.email_valido(email):
+            return 400, {"error": "Formato de email inválido"}
         if self.email_duplicado(email):
             return 409, {"error": "El email ya está registrado"}
 
@@ -51,7 +74,13 @@ class CrudUsuarios:
         if not datos:
             return 400, {"error": "JSON inválido"}
 
-        email = datos.get("email", usuario["email"]).strip()
+        email = datos.get("email", usuario["email"])
+        if not isinstance(email, str):
+            return 400, {"error": "Formato de email inválido"}
+
+        email = email.strip()
+        if not self.email_valido(email):
+            return 400, {"error": "Formato de email inválido"}
         if self.email_duplicado(email, usuario["id"]):
             return 409, {"error": "El email ya está registrado"}
 
